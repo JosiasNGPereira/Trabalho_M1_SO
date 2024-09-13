@@ -1,119 +1,66 @@
-//Servidor pipe (testado usando WSL)
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/un.h>
+#include <string.h>
+#include <fcntl.h>
 #include <unistd.h>
-#include <pthread.h> 
+#include <pthread.h>
 
-#define SOCK_PATH "/tmp/pipeso"
+#define PIPE_NUMERIC "/tmp/numbers_pipe"
+#define PIPE_STRING "/tmp/strings_pipe"
+#define REQUESTS_NUM 5 // Número de requisições por cliente
+#define CLIENT_THREADS 3 // Número de clientes simultâneos
 
-void *letraA(void *param){
+void* send_numeric_requests(void* args) {
+    char buffer[256];
+    int pipe_fd = open(PIPE_NUMERIC, O_WRONLY);
+    if (pipe_fd < 0) {
+        perror("Erro ao abrir o pipe numérico");
+        return NULL;
+    }
 
-char letra ;
+    for (int i = 0; i < REQUESTS_NUM; i++) {
+        sprintf(buffer, "%d %d", rand() % 100, rand() % 100);  // Enviar dois números aleatórios
+        write(pipe_fd, buffer, strlen(buffer) + 1);
+        printf("Cliente numérico enviou: %s\n", buffer);
+        sleep(1);
+    }
 
-    if(letra == 'A'){
-        letra = 1;
-        return 0;
-    };
-    letra = 0;
-    return 0 ;
-    
+    close(pipe_fd);
+    return NULL;
 }
 
-
-int main()
-{
-    int sockfd, newsockfd, len;
-    struct sockaddr_un local, remote;
-    char buffer[1024];
-
-    pthread_t tid_soma, tid_mult;
-    pthread_attr_t attr;
-
-    // Create socket
-    sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (sockfd < 0)
-    {
-        perror("Falha em criar o pipe");
-        return 1;
+void* send_string_requests(void* args) {
+    char buffer[256];
+    int pipe_fd = open(PIPE_STRING, O_WRONLY);
+    if (pipe_fd < 0) {
+        perror("Erro ao abrir o pipe de strings");
+        return NULL;
     }
 
-    // Bind socket to local address
-    memset(&local, 0, sizeof(local));
-    local.sun_family = AF_UNIX;
-    strncpy(local.sun_path, SOCK_PATH, sizeof(local.sun_path) - 1);
-    unlink(local.sun_path);
-    len = strlen(local.sun_path) + sizeof(local.sun_family);
-    if (bind(sockfd, (struct sockaddr *)&local, len) < 0)
-    {
-        perror("Falha em capturar o socket");
-        close(sockfd);
-        return 1;
+    for (int i = 0; i < REQUESTS_NUM; i++) {
+        sprintf(buffer, "Mensagem %d", rand() % 100);  // Enviar uma string aleatória
+        write(pipe_fd, buffer, strlen(buffer) + 1);
+        printf("Cliente string enviou: %s\n", buffer);
+        sleep(1);
     }
 
-    // Listen for connections
-    if (listen(sockfd, 5) < 0)
-    {
-        perror("Falha em escutar o socket");
-        close(sockfd);
-        return 1;
+    close(pipe_fd);
+    return NULL;
+}
+
+int main() {
+    pthread_t client_threads[CLIENT_THREADS * 2];  // *2 para ter threads numéricas e de strings
+
+    // Criando clientes simultâneos (metade para números, metade para strings)
+    for (int i = 0; i < CLIENT_THREADS; i++) {
+        pthread_create(&client_threads[i], NULL, &send_numeric_requests, NULL);
+        pthread_create(&client_threads[i + CLIENT_THREADS], NULL, &send_string_requests, NULL);
     }
 
-    printf("Servidor Named pipe ouvindo em %s...\n", SOCK_PATH);
-
-    // Accept connections
-    memset(&remote, 0, sizeof(remote));
-    len = sizeof(remote);
-    newsockfd = accept(sockfd, (struct sockaddr *)&remote, &len);
-    if (newsockfd < 0)
-    {
-        perror("Falha em aceitar coneccao");
-        close(sockfd);
-        return 1;
+    // Espera que todas as threads de cliente terminem
+    for (int i = 0; i < CLIENT_THREADS * 2; i++) {
+        pthread_join(client_threads[i], NULL);
     }
 
-    printf("Cliente conectado!\n");
-
-    // Read data from client
-    if (read(newsockfd, buffer, sizeof(buffer)) < 0)
-    {
-        perror("Falha em ler do socket");
-        close(newsockfd);
-        close(sockfd);
-        return 1;
-    }
-
-    printf("Dado recebido: %s\n", buffer);
-
-
-    pthread_attr_init(&attr);
-
-    pthread_create(&tid_soma, &attr, letraA, NULL);
-
-    pthread_join(tid_soma, NULL);
-
-    // Process data
-    // In this example, we just convert the string to uppercase
-    for (int i = 0; i < strlen(buffer); i++)
-    {
-        letraA(buffer[i]) ;
-    }
-
-    // Write processed data back to client
-    if (write(newsockfd, buffer, strlen(buffer) + 1) < 0)
-    {
-        perror("Falha em escrever no socket");
-        close(newsockfd);
-        close(sockfd);
-        return 1;
-    }
-
-    printf("Dado enviado de volta para o cliente.\n");
-
-    // Close sockets and exit
-    close(newsockfd);
-    close(sockfd);
     return 0;
 }

@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Número de requisições que o cliente vai enviar
+NUM_REQUESTS=10
+
+# Caminhos dos pipes
+PIPE_NUMERIC="/tmp/numbers_pipe"
+PIPE_STRING="/tmp/strings_pipe"
+
+# Função para enviar requisição numérica
+send_numeric_request() {
+  local a=$1
+  local b=$2
+  echo "$a $b" > $PIPE_NUMERIC
+  echo "Enviada requisição numérica: $a + $b"
+}
+
+# Função para enviar requisição de string
+send_string_request() {
+  local message=$1
+  echo "$message" > $PIPE_STRING
+  echo "Enviada requisição de string: $message"
+}
+
+# Criar várias requisições
+for i in $(seq 1 $NUM_REQUESTS); do
+  if (( i % 2 == 0 )); then
+    # Se o índice for par, enviar uma requisição numérica
+    num1=$((RANDOM % 100))
+    num2=$((RANDOM % 100))
+    send_numeric_request $num1 $num2
+  else
+    # Se o índice for ímpar, enviar uma requisição de string
+    send_string_request "Mensagem $i"
+  fi
+
+  # Simular um pequeno intervalo de tempo entre as requisições
+  sleep 1
+done
